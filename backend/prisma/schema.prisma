@@ -1,0 +1,63 @@
+generator client {
+    provider     = "prisma-client-js"
+    output       = "../src/generated/prisma"
+    moduleFormat = "cjs"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+enum Role {
+    user
+    admin
+}
+
+enum ReportStatus {
+    DRAFT
+    SUBMITTED
+    APPROVED
+    REJECTED
+}
+
+model User {
+    id           String          @id @default(uuid())
+    email        String          @unique
+    passwordHash String          @map("password_hash")
+    role         Role            @default(user)
+    reports      ExpenseReport[]
+    createdAt    DateTime        @default(now()) @map("created_at")
+    updatedAt    DateTime        @updatedAt @map("updated_at")
+
+    @@map("users")
+}
+
+model ExpenseReport {
+    id          String        @id @default(uuid())
+    userId      String        @map("user_id")
+    user        User          @relation(fields: [userId], references: [id])
+    title       String
+    description String?
+    status      ReportStatus  @default(DRAFT)
+    items       ExpenseItem[]
+    createdAt   DateTime      @default(now()) @map("created_at")
+    updatedAt   DateTime      @updatedAt @map("updated_at")
+
+    @@map("expense_reports")
+}
+
+model ExpenseItem {
+    id              String        @id @default(uuid())
+    reportId        String        @map("report_id")
+    report          ExpenseReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+    amount          Decimal       @db.Decimal(10, 2)
+    currency        String        @default("USD")
+    category        String
+    merchantName    String        @map("merchant_name")
+    transactionDate DateTime      @map("transaction_date")
+    receiptUrl      String?       @map("receipt_url")
+    createdAt       DateTime      @default(now()) @map("created_at")
+    updatedAt       DateTime      @updatedAt @map("updated_at")
+
+    @@map("expense_items")
+}

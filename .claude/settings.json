@@ -1,0 +1,20 @@
+{
+  "model": "claude-sonnet-4",
+  "projectContext": [
+    "NestJS backend",
+    "Next.js frontend",
+    "Prisma + PostgreSQL",
+    "MinIO S3-compatible storage",
+    "Receipt extraction via OpenAI"
+  ],
+  "rules": [
+    "Business logic must remain in service/domain layers",
+    "Never mutate report status in controllers",
+    "Use state-machine.ts for all transitions",
+    "Prefer typed DTOs and validation decorators"
+  ],
+  "prompts": {
+    "scaffold": "Generate minimal but production-style module scaffolding.",
+    "tests": "Prioritize readability and behavior-driven test names."
+  }
+}
