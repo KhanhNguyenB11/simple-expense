@@ -20,6 +20,13 @@ AI receipt extraction via Google Gemini, and a Next.js frontend backed by NestJS
 
 ## Running locally
 
+### Setup Gemini API key (optional) 
+
+- Docker mode: set GEMINI_API_KEY in root .env
+- Local backend mode: set GEMINI_API_KEY in backend/.env
+
+
+
 ### Quickstart (recommended)
 
 ```bash
@@ -34,8 +41,13 @@ AI receipt extraction via Google Gemini, and a Next.js frontend backed by NestJS
    cp .env.example .env
    cp backend/.env.example backend/.env
    cp frontend/.env.example frontend/.env
-   # Add your GEMINI_API_KEY to backend/.env (optional)
+   # Add your GEMINI_API_KEY to .env (optional)
    ```
+
+   Env loading rules:
+   - Docker Compose reads variables from root `.env`.
+   - `backend/.env` is used when you run backend commands directly from `backend/`.
+   - `frontend/.env` is used when you run frontend directly from `frontend/`.
 
 2. Start all services:
 
@@ -59,7 +71,7 @@ AI receipt extraction via Google Gemini, and a Next.js frontend backed by NestJS
 ## Creating an admin user
 
 `npx prisma db seed` (step 3 above) automatically creates or updates an admin user using
-`ADMIN_EMAIL` / `ADMIN_PASSWORD` from `backend/.env` (defaults to `admin@expense.local` /
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` from root `.env` in Docker mode (defaults to `admin@expense.local` /
 `Admin123!`). You can log in with those credentials immediately after seeding.
 
 ## Running tests
