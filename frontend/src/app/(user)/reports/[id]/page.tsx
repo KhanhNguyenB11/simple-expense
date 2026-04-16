@@ -1,29 +1,33 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import api from "@/lib/api";
-import StatusBadge from "@/components/StatusBadge";
-import ReceiptUpload from "@/components/ReceiptUpload";
-import ReportForm from "@/components/reports/report-form";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
-  Field,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
-import { useParams } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+  ArrowLeft,
+  Pencil,
+  Save,
+  Send,
+  Trash2,
+  FileText,
+  Package,
+  Plus,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import api from "@/lib/api";
+import ItemForm from "@/components/reports/item-form";
+import ReportDetailsShared from "@/components/reports/report-details-shared";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { useParams, useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   createItemSchema,
   type CreateItemFormValues,
 } from "@/lib/schemas/report/create-item.schema";
-import { type CreateReportFormValues } from "@/lib/schemas/report/create-report.schema";
+import { getCurrentUser } from "@/lib/auth";
 
 type ReportItem = {
   id: string;
@@ -35,11 +39,29 @@ type ReportItem = {
   receiptUrl?: string | null;
 };
 
+type ReportDetail = {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+  rejectionReason?: string | null;
+  items: ReportItem[];
+};
+
+const NEW_ITEM_PREFIX = "tmp-";
+
 export default function ReportDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const reportId = params.id as string;
   const qc = useQueryClient();
+
   const [editingItem, setEditingItem] = useState<ReportItem | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const [draftItems, setDraftItems] = useState<ReportItem[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const form = useForm<CreateItemFormValues>({
     resolver: zodResolver(createItemSchema),
@@ -54,20 +76,37 @@ export default function ReportDetailPage() {
 
   const reportQuery = useQuery({
     queryKey: ["report", reportId],
-    queryFn: async () => (await api.get(`/api/reports/${reportId}`)).data,
+    queryFn: async () =>
+      (await api.get(`/api/reports/${reportId}`)).data as ReportDetail,
   });
+
+  const meQuery = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: getCurrentUser,
+    retry: false,
+  });
+  const isAdmin = meQuery.data?.role === "admin";
 
   const report = reportQuery.data;
   const canEdit = report?.status === "DRAFT" || report?.status === "REJECTED";
 
-  const addItem = useMutation({
-    mutationFn: async (payload: CreateItemFormValues) =>
-      (await api.post(`/api/reports/${reportId}/items`, payload)).data,
-    onSuccess: () => {
-      form.reset();
-      qc.invalidateQueries({ queryKey: ["report", reportId] });
-    },
-  });
+  useEffect(() => {
+    if (!report) return;
+
+    setDraftTitle(report.title ?? "");
+    setDraftDescription(report.description ?? "");
+    setDraftItems((report.items || []) as ReportItem[]);
+    setIsDirty(false);
+    setEditingItem(null);
+
+    form.reset({
+      merchantName: "",
+      amount: "",
+      currency: "USD",
+      category: "",
+      transactionDate: "",
+    });
+  }, [report, form]);
 
   const submitReport = useMutation({
     mutationFn: async () =>
@@ -78,49 +117,78 @@ export default function ReportDetailPage() {
     },
   });
 
-  const updateReport = useMutation({
-    mutationFn: async (values: CreateReportFormValues) =>
+  const saveDraft = useMutation({
+    mutationFn: async () =>
       (
-        await api.patch(`/api/reports/${reportId}`, {
-          title: values.title.trim(),
-          description: values.description?.trim() || "",
+        await api.patch(`/api/reports/${reportId}/draft`, {
+          title: draftTitle.trim(),
+          description: draftDescription.trim(),
+          items: draftItems.map((item) => ({
+            ...(item.id.startsWith(NEW_ITEM_PREFIX) ? {} : { id: item.id }),
+            amount: String(item.amount),
+            currency: item.currency,
+            category: item.category,
+            merchantName: item.merchantName,
+            transactionDate: item.transactionDate.slice(0, 10),
+            ...(item.receiptUrl ? { receiptUrl: item.receiptUrl } : {}),
+          })),
         })
       ).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["report", reportId] });
       qc.invalidateQueries({ queryKey: ["reports"] });
+      setIsDirty(false);
     },
   });
 
-  const deleteItem = useMutation({
-    mutationFn: async (itemId: string) =>
-      (await api.delete(`/api/reports/${reportId}/items/${itemId}`)).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["report", reportId] }),
-  });
-
-  const updateItem = useMutation({
-    mutationFn: async ({
-      itemId,
-      values,
-    }: {
-      itemId: string;
-      values: CreateItemFormValues;
-    }) =>
-      (await api.patch(`/api/reports/${reportId}/items/${itemId}`, values))
-        .data,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["report", reportId] });
-      form.reset();
-      setEditingItem(null);
-    },
-  });
-
-  function onSubmit(values: CreateItemFormValues) {
+  function onSubmit(
+    values: CreateItemFormValues,
+    meta?: { receiptUrl?: string | null },
+  ) {
     if (editingItem) {
-      updateItem.mutate({ itemId: editingItem.id, values });
-      return;
+      setDraftItems((prev) =>
+        prev.map((item) =>
+          item.id === editingItem.id
+            ? {
+                ...item,
+                merchantName: values.merchantName,
+                amount: values.amount,
+                currency: values.currency,
+                category: values.category,
+                transactionDate: values.transactionDate,
+                ...(meta?.receiptUrl !== undefined
+                  ? { receiptUrl: meta.receiptUrl }
+                  : {}),
+              }
+            : item,
+        ),
+      );
+      setEditingItem(null);
+    } else {
+      const newId = `${NEW_ITEM_PREFIX}${Date.now()}`;
+      setDraftItems((prev) => [
+        ...prev,
+        {
+          id: newId,
+          merchantName: values.merchantName,
+          amount: values.amount,
+          currency: values.currency,
+          category: values.category,
+          transactionDate: values.transactionDate,
+          receiptUrl: meta?.receiptUrl ?? null,
+        },
+      ]);
     }
-    addItem.mutate(values);
+
+    setIsDirty(true);
+    form.reset({
+      merchantName: "",
+      amount: "",
+      currency: "USD",
+      category: "",
+      transactionDate: "",
+    });
+    setIsCreateOpen(false);
   }
 
   function startEditItem(item: ReportItem) {
@@ -145,400 +213,244 @@ export default function ReportDetailPage() {
     });
   }
 
+  function removeDraftItem(itemId: string) {
+    setDraftItems((prev) => prev.filter((item) => item.id !== itemId));
+    if (editingItem?.id === itemId) {
+      cancelEditItem();
+    }
+    setIsDirty(true);
+  }
+
+  const totalAmount = draftItems.reduce((sum, item) => {
+    const amount = parseFloat(String(item.amount)) || 0;
+    return sum + amount;
+  }, 0);
+
+  const currencySymbol: Record<string, string> = {
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+    JPY: "¥",
+  };
+
+  const primaryCurrency = draftItems[0]?.currency || "USD";
+  const symbol = currencySymbol[primaryCurrency] || primaryCurrency;
+
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-6">
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => router.push("/reports")}
+          iconStart={<ArrowLeft />}
+        >
+          Back to reports
+        </Button>
+      </div>
+
       {reportQuery.isLoading && (
         <p className="text-muted-foreground text-sm">Loading...</p>
       )}
 
       {report && (
         <>
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-2xl">{report.title}</CardTitle>
-                  <p className="text-muted-foreground text-sm mt-1">
-                    {report.description || "No description"}
-                  </p>
-                </div>
-                <StatusBadge status={report.status} />
-              </div>
-            </CardHeader>
-          </Card>
-
           {canEdit ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Edit report</CardTitle>
+            <Card className="border-l-4 border-l-slate-500">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-slate-600" />
+                  <CardTitle className="text-lg font-semibold">
+                    Report info
+                  </CardTitle>
+                </div>
               </CardHeader>
-              <CardContent>
-                <ReportForm
-                  initialValues={{
-                    title: report.title,
-                    description: report.description || "",
-                  }}
-                  submitText="Save report"
-                  isSubmitting={updateReport.isPending}
-                  onSubmit={(values) => updateReport.mutate(values)}
-                />
+              <CardContent className="space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Title</p>
+                  <Input
+                    value={draftTitle}
+                    onChange={(e) => {
+                      setDraftTitle(e.target.value);
+                      setIsDirty(true);
+                    }}
+                    placeholder="e.g. April travel expenses"
+                    disabled={saveDraft.isPending || submitReport.isPending}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Description</p>
+                  <Textarea
+                    value={draftDescription}
+                    onChange={(e) => {
+                      setDraftDescription(e.target.value);
+                      setIsDirty(true);
+                    }}
+                    placeholder="Optional notes for the approver"
+                    rows={3}
+                    disabled={saveDraft.isPending || submitReport.isPending}
+                  />
+                </div>
               </CardContent>
             </Card>
           ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Items</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {(report.items || []).map((item: ReportItem) => (
-                <div key={item.id} className="border rounded-lg p-3 space-y-2">
-                  {editingItem?.id === item.id ? (
-                    <form
-                      onSubmit={form.handleSubmit(onSubmit)}
-                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                    >
-                      <FieldGroup className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Controller
-                          name="merchantName"
-                          control={form.control}
-                          render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                              <FieldLabel htmlFor={field.name}>
-                                Merchant
-                              </FieldLabel>
-                              <Input
-                                {...field}
-                                id={field.name}
-                                placeholder="Merchant name"
-                                aria-invalid={fieldState.invalid}
-                              />
-                              {fieldState.invalid ? (
-                                <FieldError errors={[fieldState.error]} />
-                              ) : null}
-                            </Field>
-                          )}
-                        />
-
-                        <Controller
-                          name="amount"
-                          control={form.control}
-                          render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                              <FieldLabel htmlFor={field.name}>
-                                Amount
-                              </FieldLabel>
-                              <Input
-                                {...field}
-                                id={field.name}
-                                placeholder="0.00"
-                                aria-invalid={fieldState.invalid}
-                              />
-                              {fieldState.invalid ? (
-                                <FieldError errors={[fieldState.error]} />
-                              ) : null}
-                            </Field>
-                          )}
-                        />
-
-                        <Controller
-                          name="currency"
-                          control={form.control}
-                          render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                              <FieldLabel htmlFor={field.name}>
-                                Currency
-                              </FieldLabel>
-                              <Input
-                                {...field}
-                                id={field.name}
-                                placeholder="USD"
-                                aria-invalid={fieldState.invalid}
-                              />
-                              {fieldState.invalid ? (
-                                <FieldError errors={[fieldState.error]} />
-                              ) : null}
-                            </Field>
-                          )}
-                        />
-
-                        <Controller
-                          name="category"
-                          control={form.control}
-                          render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                              <FieldLabel htmlFor={field.name}>
-                                Category
-                              </FieldLabel>
-                              <Input
-                                {...field}
-                                id={field.name}
-                                placeholder="e.g. Travel"
-                                aria-invalid={fieldState.invalid}
-                              />
-                              {fieldState.invalid ? (
-                                <FieldError errors={[fieldState.error]} />
-                              ) : null}
-                            </Field>
-                          )}
-                        />
-
-                        <Controller
-                          name="transactionDate"
-                          control={form.control}
-                          render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                              <FieldLabel htmlFor={field.name}>Date</FieldLabel>
-                              <Input
-                                {...field}
-                                id={field.name}
-                                type="date"
-                                aria-invalid={fieldState.invalid}
-                              />
-                              {fieldState.invalid ? (
-                                <FieldError errors={[fieldState.error]} />
-                              ) : null}
-                            </Field>
-                          )}
-                        />
-                      </FieldGroup>
-                      {canEdit && (
-                        <ReceiptUpload
-                          reportId={reportId}
-                          itemId={item.id}
-                          onExtracted={(data) => {
-                            if (data.merchantName)
-                              form.setValue("merchantName", data.merchantName);
-                            if (data.amount)
-                              form.setValue("amount", data.amount);
-                            if (data.currency)
-                              form.setValue("currency", data.currency);
-                            if (data.transactionDate) {
-                              form.setValue(
-                                "transactionDate",
-                                data.transactionDate.slice(0, 10),
-                              );
-                            }
-                          }}
-                        />
-                      )}
-
-                      <div className="md:col-span-2">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="submit"
-                            disabled={addItem.isPending || updateItem.isPending}
-                          >
-                            {editingItem
-                              ? updateItem.isPending
-                                ? "Saving..."
-                                : "Save changes"
-                              : addItem.isPending
-                                ? "Saving..."
-                                : "Add item"}
-                          </Button>
-                          {editingItem ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={cancelEditItem}
-                            >
-                              Cancel edit
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </form>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{item.merchantName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {item.amount} {item.currency} · {item.category}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {canEdit && editingItem?.id !== item.id ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => startEditItem(item)}
-                          >
-                            Edit details
-                          </Button>
-                        ) : null}
-
-                        {canEdit && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => deleteItem.mutate(item.id)}
-                            disabled={deleteItem.isPending}
-                          >
-                            Delete
-                          </Button>
-                        )}
-                      </div>
+          <ReportDetailsShared
+            title={draftTitle || report.title}
+            description={draftDescription || report.description}
+            status={report.status}
+            rejectionReason={report.rejectionReason}
+            totalAmountText={`${symbol}${totalAmount.toFixed(2)}`}
+            summarySubtext={primaryCurrency}
+            itemCount={draftItems.length}
+            showReportDetails={isAdmin}
+            itemsHeaderRight={
+              <span className="ml-auto text-sm font-semibold text-muted-foreground">
+                {draftItems.length} items
+              </span>
+            }
+            summaryExtra={
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Average</span>
+                <span className="font-semibold">
+                  {symbol}
+                  {draftItems.length > 0
+                    ? (totalAmount / draftItems.length).toFixed(2)
+                    : "0.00"}
+                </span>
+              </div>
+            }
+          >
+            {draftItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                No items added yet
+              </p>
+            ) : null}
+            {draftItems.map((item: ReportItem) => (
+              <div
+                key={item.id}
+                className="border border-gray-400 rounded-lg p-3 space-y-2 hover:bg-muted/30 transition-colors"
+              >
+                {editingItem?.id === item.id ? (
+                  <ItemForm
+                    form={form}
+                    onSubmit={onSubmit}
+                    submitText="Save changes"
+                    isSubmitting={saveDraft.isPending}
+                    onCancel={cancelEditItem}
+                    reportId={reportId}
+                    itemId={item.id}
+                    canEdit={canEdit}
+                    initialReceiptUrl={item.receiptUrl ?? null}
+                  />
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{item.merchantName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {symbol}
+                        {parseFloat(String(item.amount)).toFixed(2)}{" "}
+                        {item.currency}
+                        {" · "}
+                        {item.category}
+                      </p>
                     </div>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{"Add item"}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!canEdit ? (
-                <p className="text-sm text-muted-foreground">
-                  Report is locked in {report.status} state.
-                </p>
-              ) : (
-                // ADD items form only
-                <form
-                  onSubmit={form.handleSubmit(onSubmit)}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                >
-                  <FieldGroup className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Controller
-                      name="merchantName"
-                      control={form.control}
-                      render={({ field, fieldState }) => (
-                        <Field data-invalid={fieldState.invalid}>
-                          <FieldLabel htmlFor={field.name}>Merchant</FieldLabel>
-                          <Input
-                            {...field}
-                            id={field.name}
-                            placeholder="Merchant name"
-                            aria-invalid={fieldState.invalid}
-                          />
-                          {fieldState.invalid ? (
-                            <FieldError errors={[fieldState.error]} />
-                          ) : null}
-                        </Field>
-                      )}
-                    />
-
-                    <Controller
-                      name="amount"
-                      control={form.control}
-                      render={({ field, fieldState }) => (
-                        <Field data-invalid={fieldState.invalid}>
-                          <FieldLabel htmlFor={field.name}>Amount</FieldLabel>
-                          <Input
-                            {...field}
-                            id={field.name}
-                            placeholder="0.00"
-                            aria-invalid={fieldState.invalid}
-                          />
-                          {fieldState.invalid ? (
-                            <FieldError errors={[fieldState.error]} />
-                          ) : null}
-                        </Field>
-                      )}
-                    />
-
-                    <Controller
-                      name="currency"
-                      control={form.control}
-                      render={({ field, fieldState }) => (
-                        <Field data-invalid={fieldState.invalid}>
-                          <FieldLabel htmlFor={field.name}>Currency</FieldLabel>
-                          <Input
-                            {...field}
-                            id={field.name}
-                            placeholder="USD"
-                            aria-invalid={fieldState.invalid}
-                          />
-                          {fieldState.invalid ? (
-                            <FieldError errors={[fieldState.error]} />
-                          ) : null}
-                        </Field>
-                      )}
-                    />
-
-                    <Controller
-                      name="category"
-                      control={form.control}
-                      render={({ field, fieldState }) => (
-                        <Field data-invalid={fieldState.invalid}>
-                          <FieldLabel htmlFor={field.name}>Category</FieldLabel>
-                          <Input
-                            {...field}
-                            id={field.name}
-                            placeholder="e.g. Travel"
-                            aria-invalid={fieldState.invalid}
-                          />
-                          {fieldState.invalid ? (
-                            <FieldError errors={[fieldState.error]} />
-                          ) : null}
-                        </Field>
-                      )}
-                    />
-
-                    <Controller
-                      name="transactionDate"
-                      control={form.control}
-                      render={({ field, fieldState }) => (
-                        <Field data-invalid={fieldState.invalid}>
-                          <FieldLabel htmlFor={field.name}>Date</FieldLabel>
-                          <Input
-                            {...field}
-                            id={field.name}
-                            type="date"
-                            aria-invalid={fieldState.invalid}
-                          />
-                          {fieldState.invalid ? (
-                            <FieldError errors={[fieldState.error]} />
-                          ) : null}
-                        </Field>
-                      )}
-                    />
-                  </FieldGroup>
-
-                  <div className="md:col-span-2">
                     <div className="flex items-center gap-2">
                       <Button
-                        type="submit"
-                        disabled={addItem.isPending || updateItem.isPending}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startEditItem(item)}
+                        iconStart={<Pencil />}
                       >
-                        {editingItem
-                          ? updateItem.isPending
-                            ? "Saving..."
-                            : "Save changes"
-                          : addItem.isPending
-                            ? "Saving..."
-                            : "Add item"}
+                        Details
                       </Button>
-                      {editingItem ? (
+
+                      {canEdit ? (
                         <Button
-                          type="button"
-                          variant="outline"
-                          onClick={cancelEditItem}
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => removeDraftItem(item.id)}
+                          disabled={saveDraft.isPending}
+                          iconStart={<Trash2 />}
                         >
-                          Cancel edit
+                          Delete
                         </Button>
                       ) : null}
                     </div>
                   </div>
-                </form>
-              )}
-            </CardContent>
-          </Card>
+                )}
+              </div>
+            ))}
+            {!isCreateOpen && canEdit && (
+              <div className="flex justify-end">
+                <Button
+                  iconStart={<Plus />}
+                  onClick={() => setIsCreateOpen(true)}
+                >
+                  Add new item
+                </Button>
+              </div>
+            )}
+
+            {canEdit && isCreateOpen ? (
+              <Card className="border-l-4 border-l-purple-500">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-5 w-5 text-purple-500" />
+                    <CardTitle className="text-lg font-semibold">
+                      Add New Item
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ItemForm
+                    form={form}
+                    onSubmit={onSubmit}
+                    submitText="Add item"
+                    isSubmitting={saveDraft.isPending}
+                    canEdit={canEdit}
+                    onCancel={() => setIsCreateOpen(false)}
+                    reportId={reportId}
+                  />
+                </CardContent>
+              </Card>
+            ) : null}
+          </ReportDetailsShared>
 
           <Separator />
 
-          {canEdit && (
-            <Button
-              size="lg"
-              onClick={() => submitReport.mutate()}
-              disabled={submitReport.isPending}
-            >
-              {submitReport.isPending ? "Submitting..." : "Submit report"}
-            </Button>
-          )}
+          {canEdit ? (
+            <div className="flex flex-col justify-center items-end flex-wrap gap-2">
+              <p className="text-sm text-muted-foreground">
+                {isDirty
+                  ? "Save your pending edits first. This button will turn into Submit report once everything is saved."
+                  : "Your draft is up to date and ready to submit."}
+              </p>
+              <Button
+                size="lg"
+                onClick={() => {
+                  if (isDirty) {
+                    saveDraft.mutate();
+                    return;
+                  }
+
+                  submitReport.mutate();
+                }}
+                disabled={saveDraft.isPending || submitReport.isPending}
+                iconStart={isDirty ? <Save /> : <Send />}
+              >
+                {saveDraft.isPending
+                  ? "Saving..."
+                  : submitReport.isPending
+                    ? "Submitting..."
+                    : isDirty
+                      ? "Save changes"
+                      : "Submit report"}
+              </Button>
+            </div>
+          ) : null}
         </>
       )}
     </main>

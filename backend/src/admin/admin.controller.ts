@@ -2,13 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  BadRequestException,
   Param,
   Patch,
   Query,
   UseGuards,
 } from "@nestjs/common";
 import { IsIn, IsOptional, IsString } from "class-validator";
-import { ReportStatus } from "@prisma/client";
+import { ReportStatus } from "../generated/prisma";
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -42,11 +43,16 @@ class AdminActionDto {
 export class AdminController {
   constructor(private prisma: PrismaService) {}
 
+  private computeTotalAmount(items: Array<{ amount: unknown }>): string {
+    const total = items.reduce((sum, item) => sum + Number(item.amount), 0);
+    return total.toFixed(2);
+  }
+
   @ApiOperation({ summary: "List all reports (admin)" })
   @ApiQuery({ name: "status", enum: ReportStatus, required: false })
   @Get()
-  findAll(@Query("status") status?: ReportStatus) {
-    return this.prisma.expenseReport.findMany({
+  async findAll(@Query("status") status?: ReportStatus) {
+    const reports = await this.prisma.expenseReport.findMany({
       where: status ? { status } : undefined,
       include: {
         items: true,
@@ -54,6 +60,28 @@ export class AdminController {
       },
       orderBy: { createdAt: "desc" },
     });
+
+    return reports.map((report) => ({
+      ...report,
+      total_amount: this.computeTotalAmount(report.items),
+    }));
+  }
+
+  @ApiOperation({ summary: "Get report details (admin)" })
+  @Get(":id")
+  async findOne(@Param("id") id: string) {
+    const report = await this.prisma.expenseReport.findUniqueOrThrow({
+      where: { id },
+      include: {
+        items: true,
+        user: { select: { id: true, email: true } },
+      },
+    });
+
+    return {
+      ...report,
+      total_amount: this.computeTotalAmount(report.items),
+    };
   }
 
   @ApiOperation({ summary: "Approve or reject a submitted report" })
@@ -64,9 +92,17 @@ export class AdminController {
       where: { id },
     });
     const nextStatus = applyTransition(report.status, dto.action, "admin");
+    const reason = dto.reason?.trim();
+    if (dto.action === "reject" && !reason) {
+      throw new BadRequestException("Rejection reason is required");
+    }
+
     return this.prisma.expenseReport.update({
       where: { id },
-      data: { status: nextStatus },
+      data: {
+        status: nextStatus,
+        rejectionReason: dto.action === "reject" ? reason : null,
+      },
     });
   }
 }

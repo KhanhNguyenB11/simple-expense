@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   Post,
   Res,
@@ -13,6 +14,7 @@ import { AuthService } from "./auth.service";
 import { SignupDto } from "./dto/signup.dto";
 import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { CurrentUser } from "./decorators/current-user.decorator";
 
 const COOKIE_NAME = "access_token";
 
@@ -75,5 +77,14 @@ export class AuthController {
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(COOKIE_NAME, { path: "/" });
     return { message: "Logged out" };
+  }
+
+  @ApiOperation({ summary: "Get currently authenticated user" })
+  @ApiResponse({ status: 200, description: "Current user profile" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @UseGuards(JwtAuthGuard)
+  @Get("me")
+  me(@CurrentUser() user: { id: string; email: string; role: string }) {
+    return { user };
   }
 }

@@ -7,6 +7,7 @@ import { AuthModule } from "./auth/auth.module";
 import { ReportsModule } from "./reports/reports.module";
 import { ItemsModule } from "./items/items.module";
 import { AdminModule } from "./admin/admin.module";
+import { FilesModule } from "./files/files.module";
 import configuration from "./config/configuration";
 
 @Module({
@@ -20,6 +21,7 @@ import configuration from "./config/configuration";
     ReportsModule,
     ItemsModule,
     AdminModule,
+    FilesModule,
   ],
 })
 export class AppModule {}

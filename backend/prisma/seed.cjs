@@ -3,7 +3,7 @@ require("dotenv/config");
 const bcrypt = require("bcrypt");
 const { Pool } = require("pg");
 const { PrismaPg } = require("@prisma/adapter-pg");
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient } = require("../src/generated/prisma");
 
 const DB_HOST = process.env.DB_HOST || "127.0.0.1";
 const DB_PORT = process.env.DB_PORT || "5432";

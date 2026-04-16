@@ -3,7 +3,6 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import api from "@/lib/api";
-import { setUser } from "@/lib/auth";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/auth.schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +25,6 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     try {
       const res = await api.post("/api/auth/login", data);
-      setUser(res.data.user);
       if (res.data.user.role === "admin") router.push("/admin/reports");
       else router.push("/reports");
     } catch (err: any) {
@@ -72,7 +70,6 @@ export default function LoginPage() {
               <Input
                 id="password"
                 {...register("password")}
-                placeholder="••••••••"
                 type="password"
                 autoComplete="current-password"
                 aria-invalid={!!errors.password}

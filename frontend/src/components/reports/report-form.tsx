@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
+import { Save, X } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import {
   createReportSchema,
   type CreateReportFormValues,
@@ -91,11 +97,16 @@ export default function ReportForm({
       </FieldGroup>
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting} iconStart={<Save />}>
           {isSubmitting ? "Saving..." : submitText}
         </Button>
         {onCancel ? (
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            iconStart={<X />}
+          >
             Cancel
           </Button>
         ) : null}

@@ -46,10 +46,15 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  iconStart,
+  iconEnd,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
+    iconStart?: React.ReactNode;
+    iconEnd?: React.ReactNode;
   }) {
   const Comp = asChild ? Slot.Root : "button";
 
@@ -60,7 +65,11 @@ function Button({
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {iconStart ? <span data-icon="inline-start">{iconStart}</span> : null}
+      {children}
+      {iconEnd ? <span data-icon="inline-end">{iconEnd}</span> : null}
+    </Comp>
   );
 }
 

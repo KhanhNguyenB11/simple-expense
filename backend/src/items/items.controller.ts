@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -77,6 +78,9 @@ export class ItemsController {
     @Param("itemId") itemId: string,
     @UploadedFile() file: any,
   ) {
+    if (!file) {
+      throw new BadRequestException("Receipt file is required");
+    }
     return this.itemsService.uploadReceipt(itemId, user.id, file);
   }
 }

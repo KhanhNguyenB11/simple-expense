@@ -33,15 +33,16 @@ model User {
 }
 
 model ExpenseReport {
-    id          String        @id @default(uuid())
-    userId      String        @map("user_id")
-    user        User          @relation(fields: [userId], references: [id])
-    title       String
-    description String?
-    status      ReportStatus  @default(DRAFT)
-    items       ExpenseItem[]
-    createdAt   DateTime      @default(now()) @map("created_at")
-    updatedAt   DateTime      @updatedAt @map("updated_at")
+    id              String        @id @default(uuid())
+    userId          String        @map("user_id")
+    user            User          @relation(fields: [userId], references: [id])
+    title           String
+    description     String?
+    rejectionReason String?       @map("rejection_reason")
+    status          ReportStatus  @default(DRAFT)
+    items           ExpenseItem[]
+    createdAt       DateTime      @default(now()) @map("created_at")
+    updatedAt       DateTime      @updatedAt @map("updated_at")
 
     @@map("expense_reports")
 }

@@ -51,4 +51,34 @@ export class StorageService implements OnModuleInit {
   async getPresignedUrl(key: string, expirySeconds = 3600): Promise<string> {
     return this.client.presignedGetObject(this.bucket, key, expirySeconds);
   }
+
+  async listFiles(
+    prefix: string,
+  ): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
+    const files: Array<{ key: string; size: number; lastModified: Date }> = [];
+
+    const stream = this.client.listObjects(this.bucket, prefix);
+
+    return new Promise((resolve, reject) => {
+      stream.on("data", (obj: Minio.BucketItem) => {
+        files.push({
+          key: obj.name,
+          size: obj.size,
+          lastModified: obj.lastModified,
+        });
+      });
+
+      stream.on("error", (err: any) => {
+        reject(err);
+      });
+
+      stream.on("end", () => {
+        resolve(files);
+      });
+    });
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.client.removeObject(this.bucket, key);
+  }
 }

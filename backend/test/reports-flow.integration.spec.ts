@@ -7,7 +7,7 @@ import { PrismaService } from "../src/prisma/prisma.service";
 /**
  * Integration test: full DRAFT → SUBMITTED → APPROVED lifecycle.
  * Requires a running PostgreSQL instance.
- * Set DATABASE_URL in .env or TEST_DATABASE_URL env variable.
+ * Set DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, and DB_NAME in .env.
  */
 describe("Expense Report Happy Path (integration)", () => {
   let app: INestApplication;
@@ -125,6 +125,37 @@ describe("Expense Report Happy Path (integration)", () => {
       .get("/api/admin/reports")
       .set("Authorization", `Bearer ${userToken}`)
       .expect(403);
+  });
+
+  it("admin can reject with a reason and user can see it", async () => {
+    const rejectionReason = "Missing taxi receipt and invalid date format";
+
+    const rejectRes = await request(app.getHttpServer())
+      .patch(`/api/admin/reports/${reportId}/action`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ action: "reject", reason: rejectionReason })
+      .expect(200);
+
+    expect(rejectRes.body.status).toBe("REJECTED");
+    expect(rejectRes.body.rejectionReason).toBe(rejectionReason);
+
+    const userViewRes = await request(app.getHttpServer())
+      .get(`/api/reports/${reportId}`)
+      .set("Authorization", `Bearer ${userToken}`)
+      .expect(200);
+
+    expect(userViewRes.body.status).toBe("REJECTED");
+    expect(userViewRes.body.rejectionReason).toBe(rejectionReason);
+  });
+
+  it("clears rejection reason when user re-submits (REJECTED → SUBMITTED)", async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/reports/${reportId}/submit`)
+      .set("Authorization", `Bearer ${userToken}`)
+      .expect(200);
+
+    expect(res.body.status).toBe("SUBMITTED");
+    expect(res.body.rejectionReason).toBeNull();
   });
 
   it("admin approves the report (SUBMITTED → APPROVED)", async () => {

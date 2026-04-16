@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { ReportStatus } from "@prisma/client";
+import { ReportStatus } from "../generated/prisma";
 
 /**
  * Decision: REJECTED reports transition directly to SUBMITTED on re-submit.

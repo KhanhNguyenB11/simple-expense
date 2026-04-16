@@ -3,7 +3,6 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import api from "@/lib/api";
-import { setUser } from "@/lib/auth";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/auth.schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +23,7 @@ export default function SignupPage() {
 
   const onSubmit = async (data: SignupFormValues) => {
     try {
-      const res = await api.post("/api/auth/signup", data);
-      setUser(res.data.user);
+      await api.post("/api/auth/signup", data);
       router.push("/reports");
     } catch (err: any) {
       setError("root", {

@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { ReportStatus } from "@prisma/client";
+import { ReportStatus } from "../generated/prisma";
 import { applyTransition, assertItemsEditable } from "./state-machine";
 
 describe("State Machine — applyTransition", () => {

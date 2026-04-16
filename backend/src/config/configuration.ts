@@ -39,7 +39,9 @@ export default () => ({
     bucket: process.env.MINIO_BUCKET ?? "receipts",
   },
 
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY ?? "",
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY ?? "",
+    // Allow overriding model; default is a good multimodal model for receipts.
+    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite",
   },
 });
