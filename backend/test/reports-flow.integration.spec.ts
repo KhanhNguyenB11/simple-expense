@@ -1,8 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
-import * as request from "supertest";
+import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
+import cookieParser from "cookie-parser";
 
 /**
  * Integration test: full DRAFT → SUBMITTED → APPROVED lifecycle.
@@ -12,8 +13,8 @@ import { PrismaService } from "../src/prisma/prisma.service";
 describe("Expense Report Happy Path (integration)", () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let userToken: string;
-  let adminToken: string;
+  let userAgent: ReturnType<typeof request.agent>;
+  let adminAgent: ReturnType<typeof request.agent>;
   let reportId: string;
   let itemId: string;
 
@@ -23,6 +24,7 @@ describe("Expense Report Happy Path (integration)", () => {
     }).compile();
 
     app = module.createNestApplication();
+    app.use(cookieParser());
     app.setGlobalPrefix("api");
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
@@ -34,6 +36,9 @@ describe("Expense Report Happy Path (integration)", () => {
     await prisma.expenseItem.deleteMany();
     await prisma.expenseReport.deleteMany();
     await prisma.user.deleteMany();
+
+    userAgent = request.agent(app.getHttpServer());
+    adminAgent = request.agent(app.getHttpServer());
   });
 
   afterAll(async () => {
@@ -41,17 +46,14 @@ describe("Expense Report Happy Path (integration)", () => {
   });
 
   it("signs up a regular user", async () => {
-    const res = await request(app.getHttpServer())
+    await userAgent
       .post("/api/auth/signup")
       .send({ email: "testuser@example.com", password: "password123" })
       .expect(201);
-
-    userToken = res.body.accessToken;
-    expect(userToken).toBeDefined();
   });
 
   it("signs up and promotes an admin user", async () => {
-    await request(app.getHttpServer())
+    await adminAgent
       .post("/api/auth/signup")
       .send({ email: "admin@example.com", password: "adminpass123" })
       .expect(201);
@@ -61,18 +63,16 @@ describe("Expense Report Happy Path (integration)", () => {
       data: { role: "admin" },
     });
 
-    const loginRes = await request(app.getHttpServer())
+    // Re-login so the JWT cookie includes the updated admin role
+    await adminAgent
       .post("/api/auth/login")
       .send({ email: "admin@example.com", password: "adminpass123" })
       .expect(200);
-
-    adminToken = loginRes.body.accessToken;
   });
 
   it("creates a DRAFT report", async () => {
-    const res = await request(app.getHttpServer())
+    const res = await userAgent
       .post("/api/reports")
-      .set("Authorization", `Bearer ${userToken}`)
       .send({ title: "Business Trip Q2", description: "NYC expenses" })
       .expect(201);
 
@@ -81,9 +81,8 @@ describe("Expense Report Happy Path (integration)", () => {
   });
 
   it("adds an expense item to the DRAFT report", async () => {
-    const res = await request(app.getHttpServer())
+    const res = await userAgent
       .post(`/api/reports/${reportId}/items`)
-      .set("Authorization", `Bearer ${userToken}`)
       .send({
         merchantName: "JFK Airport Taxi",
         amount: "45.00",
@@ -98,18 +97,16 @@ describe("Expense Report Happy Path (integration)", () => {
   });
 
   it("submits the report (DRAFT → SUBMITTED)", async () => {
-    const res = await request(app.getHttpServer())
+    const res = await userAgent
       .post(`/api/reports/${reportId}/submit`)
-      .set("Authorization", `Bearer ${userToken}`)
-      .expect(200);
+      .expect(201);
 
     expect(res.body.status).toBe("SUBMITTED");
   });
 
   it("blocks item additions on a SUBMITTED report", async () => {
-    await request(app.getHttpServer())
+    await userAgent
       .post(`/api/reports/${reportId}/items`)
-      .set("Authorization", `Bearer ${userToken}`)
       .send({
         merchantName: "Hotel",
         amount: "200.00",
@@ -121,47 +118,36 @@ describe("Expense Report Happy Path (integration)", () => {
   });
 
   it("non-admin cannot access admin endpoints", async () => {
-    await request(app.getHttpServer())
-      .get("/api/admin/reports")
-      .set("Authorization", `Bearer ${userToken}`)
-      .expect(403);
+    await userAgent.get("/api/admin/reports").expect(403);
   });
 
   it("admin can reject with a reason and user can see it", async () => {
     const rejectionReason = "Missing taxi receipt and invalid date format";
 
-    const rejectRes = await request(app.getHttpServer())
+    const rejectRes = await adminAgent
       .patch(`/api/admin/reports/${reportId}/action`)
-      .set("Authorization", `Bearer ${adminToken}`)
       .send({ action: "reject", reason: rejectionReason })
       .expect(200);
 
     expect(rejectRes.body.status).toBe("REJECTED");
     expect(rejectRes.body.rejectionReason).toBe(rejectionReason);
 
-    const userViewRes = await request(app.getHttpServer())
-      .get(`/api/reports/${reportId}`)
-      .set("Authorization", `Bearer ${userToken}`)
-      .expect(200);
+    const userViewRes = await userAgent.get(`/api/reports/${reportId}`).expect(200);
 
     expect(userViewRes.body.status).toBe("REJECTED");
     expect(userViewRes.body.rejectionReason).toBe(rejectionReason);
   });
 
   it("clears rejection reason when user re-submits (REJECTED → SUBMITTED)", async () => {
-    const res = await request(app.getHttpServer())
-      .post(`/api/reports/${reportId}/submit`)
-      .set("Authorization", `Bearer ${userToken}`)
-      .expect(200);
+    const res = await userAgent.post(`/api/reports/${reportId}/submit`).expect(201);
 
     expect(res.body.status).toBe("SUBMITTED");
     expect(res.body.rejectionReason).toBeNull();
   });
 
   it("admin approves the report (SUBMITTED → APPROVED)", async () => {
-    const res = await request(app.getHttpServer())
+    const res = await adminAgent
       .patch(`/api/admin/reports/${reportId}/action`)
-      .set("Authorization", `Bearer ${adminToken}`)
       .send({ action: "approve" })
       .expect(200);
 
@@ -169,9 +155,8 @@ describe("Expense Report Happy Path (integration)", () => {
   });
 
   it("blocks further transitions from APPROVED (terminal state)", async () => {
-    await request(app.getHttpServer())
+    await adminAgent
       .patch(`/api/admin/reports/${reportId}/action`)
-      .set("Authorization", `Bearer ${adminToken}`)
       .send({ action: "reject" })
       .expect(400);
   });

@@ -24,7 +24,7 @@
 - [x] Item CRUD gated by report status
 - [x] Receipt upload endpoint
 - [x] MinIO integration
-- [x] GPT extraction integration
+- [x] Gemini extraction integration
 
 ## Phase 5 — Frontend
 

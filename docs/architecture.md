@@ -7,7 +7,7 @@ flowchart LR
   UI[Next.js Frontend] --> API[NestJS API]
   API --> DB[(PostgreSQL)]
   API --> S3[(MinIO)]
-  API --> LLM[OpenAI GPT-4o-mini]
+  API --> LLM[Google Gemini]
 ```
 
 ## Layers
@@ -19,10 +19,10 @@ flowchart LR
 
 ## Core Workflow
 
-1. User signs up / logs in and receives JWT.
+1. User signs up / logs in and receives a JWT via an HTTP-only cookie.
 2. User creates report in DRAFT state.
 3. User adds items in DRAFT/REJECTED only.
-4. User uploads receipt; backend stores in MinIO and extracts fields via GPT-4o-mini.
+4. User uploads receipt; backend stores in MinIO and extracts fields via Gemini.
 5. User submits report (SUBMITTED).
 6. Admin approves or rejects report.
 

@@ -4,7 +4,7 @@
  * Inject ConfigService and use config.get<T>('key') throughout the app.
  */
 export default () => ({
-  port: parseInt(process.env.PORT ?? "8000", 10),
+  port: parseInt(process.env.PORT ?? "8001", 10),
   nodeEnv: process.env.NODE_ENV ?? "development",
   // Comma-separated list of allowed origins, e.g.
   // FRONTEND_URL=http://localhost:3000,https://myapp.vercel.app

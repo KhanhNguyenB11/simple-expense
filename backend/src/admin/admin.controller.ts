@@ -22,6 +22,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { applyTransition } from "../reports/state-machine";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
 
 class AdminActionDto {
   @ApiProperty({ enum: ["approve", "reject"] })
@@ -41,7 +42,10 @@ class AdminActionDto {
 @Roles("admin")
 @Controller("admin/reports")
 export class AdminController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+  ) {}
 
   private computeTotalAmount(items: Array<{ amount: unknown }>): string {
     const total = items.reduce((sum, item) => sum + Number(item.amount), 0);
@@ -104,5 +108,35 @@ export class AdminController {
         rejectionReason: dto.action === "reject" ? reason : null,
       },
     });
+  }
+
+  @ApiOperation({ summary: "Get attached files for an item (admin)" })
+  @Get(":id/items/:itemId/files")
+  async getItemFiles(@Param("id") reportId: string, @Param("itemId") itemId: string) {
+    const report = await this.prisma.expenseReport.findUniqueOrThrow({
+      where: { id: reportId },
+      select: { userId: true },
+    });
+
+    const item = await this.prisma.expenseItem.findUniqueOrThrow({
+      where: { id: itemId },
+      select: { reportId: true },
+    });
+    if (item.reportId !== reportId) {
+      throw new BadRequestException("Item does not belong to this report");
+    }
+
+    const files = await this.storageService.listFiles(
+      `receipts/${report.userId}/${itemId}/`,
+    );
+
+    return {
+      files: files.map((file) => ({
+        key: file.key,
+        name: file.key.split("/").pop() || file.key,
+        size: file.size,
+        uploadedAt: file.lastModified,
+      })),
+    };
   }
 }

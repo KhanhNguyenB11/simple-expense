@@ -7,7 +7,7 @@ AI receipt extraction via Google Gemini, and a Next.js frontend backed by NestJS
 
 | Layer        | Technology                                                         |
 | ----------- | ------------------------------------------------------------------ |
-| Frontend    | Next.js 14 (App Router), TypeScript, TanStack Query, Tailwind CSS |
+| Frontend    | Next.js 16 (App Router), TypeScript, TanStack Query, Tailwind CSS |
 | Backend     | NestJS, TypeScript, Prisma ORM                                     |
 | Database    | PostgreSQL 16                                                      |
 | File Storage| MinIO (S3-compatible)                                              |
@@ -20,11 +20,20 @@ AI receipt extraction via Google Gemini, and a Next.js frontend backed by NestJS
 
 ## Running locally
 
+### Quickstart (recommended)
+
+```bash
+./scripts/dev.sh
+```
+
+### Manual steps
+
 1. Clone the repo and configure environment variables:
 
    ```bash
    cp .env.example .env
    cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
    # Add your GEMINI_API_KEY to backend/.env (optional)
    ```
 
@@ -37,38 +46,34 @@ AI receipt extraction via Google Gemini, and a Next.js frontend backed by NestJS
 3. Run database migrations:
 
    ```bash
-   docker compose exec backend npx prisma migrate deploy
-   docker compose exec backend npm run prisma:seed
+   docker compose exec backend npx prisma migrate dev
+   docker compose exec backend npx prisma db seed
    ```
 
 4. Open:
 
    - Frontend: `http://localhost:3000`
-   - Backend API: `http://localhost:3001/api`
+   - Backend API: `http://localhost:8001/api`
    - MinIO Console: `http://localhost:9001` (minioadmin / minioadmin)
 
 ## Creating an admin user
 
-The simplest way to create an admin for local testing:
-
-1. Sign up via the UI as a regular user.  
-2. Promote that user to admin directly in the database:
-
-   ```sql
-   UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
-   ```
-
-Adjust the email to match the account you created.
+`npx prisma db seed` (step 3 above) automatically creates or updates an admin user using
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` from `backend/.env` (defaults to `admin@expense.local` /
+`Admin123!`). You can log in with those credentials immediately after seeding.
 
 ## Running tests
 
 ```bash
-# Unit tests — state machine + business logic
-cd backend && npm test
+# Run tests without installing Node locally (recommended)
+docker compose exec backend npm test
+docker compose exec backend npm run test:integration
 
-# Integration test — DRAFT → SUBMITTED → APPROVED happy path
+# Or run locally (requires Node/npm)
+cd backend && npm test
 cd backend && npm run test:integration
 ```
+
 
 ## Project structure
 
@@ -103,10 +108,7 @@ touch transition logic directly; they delegate to services that call the state m
 
 ## AI usage
 
-I used AI coding tools (Cursor with Claude / Copilot-style assistance) throughout this project as a
-primary accelerator. AI helped with: initial NestJS module scaffolding, Prisma schema generation,
-the Gemini extraction service, Tailwind-styled frontend components, and the integration test
-structure.
+I used AI coding tools (Cursor with Claude / Copilot-style assistance) throughout this project as a primary accelerator. AI helped with: initial NestJS module scaffolding, Prisma schema generation, the Gemini extraction service, Tailwind-styled frontend components, and the integration test structure.
 
 I overrode or corrected AI output in several key places:
 

@@ -12,7 +12,7 @@ const config = {
    * Not used by the axios instance (which sends relative requests through
    * the Next.js rewrite layer).
    */
-  apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+  apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001",
 
   isProd: process.env.NODE_ENV === "production",
   isDev: process.env.NODE_ENV === "development",

@@ -18,6 +18,7 @@ interface FileListProps {
   reportId: string;
   itemId?: string;
   canEdit?: boolean;
+  scope?: "user" | "admin";
 }
 
 interface FileInfo {
@@ -27,14 +28,22 @@ interface FileInfo {
   uploadedAt: string;
 }
 
-export default function FileList({ reportId, itemId, canEdit }: FileListProps) {
+export default function FileList({
+  reportId,
+  itemId,
+  canEdit,
+  scope = "user",
+}: FileListProps) {
   const qc = useQueryClient();
-  const endpoint = itemId
-    ? `/api/reports/${reportId}/items/${itemId}/files`
-    : `/api/reports/${reportId}/files`;
+  const endpoint =
+    scope === "admin"
+      ? `/api/admin/reports/${reportId}/items/${itemId}/files`
+      : itemId
+        ? `/api/reports/${reportId}/items/${itemId}/files`
+        : `/api/reports/${reportId}/files`;
 
   const { data, isLoading, error } = useQuery<{ files: FileInfo[] }>({
-    queryKey: ["files", reportId, itemId],
+    queryKey: ["files", scope, reportId, itemId],
     queryFn: () => api.get(endpoint).then((res) => res.data),
     staleTime: 30 * 1000, // 30 seconds
   });
@@ -47,7 +56,7 @@ export default function FileList({ reportId, itemId, canEdit }: FileListProps) {
       return (await api.delete(url, { params: { key: fileKey } })).data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["files", reportId, itemId] });
+      qc.invalidateQueries({ queryKey: ["files", scope, reportId, itemId] });
     },
   });
 

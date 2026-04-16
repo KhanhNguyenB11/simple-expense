@@ -32,8 +32,8 @@ SUBMITTED --[reject]-->  REJECTED
 1. `POST /api/reports/:reportId/items/:itemId/receipt` (multipart/form-data)
 2. Multer buffers file in memory (max 10MB)
 3. `StorageService` uploads buffer to MinIO, returns object key
-4. `ExtractionService` sends base64 to GPT-4o-mini vision endpoint
-5. Response: `{ receiptUrl: presignedUrl, extracted: { merchantName, amount, currency, transactionDate } }`
+4. `ExtractionService` sends base64 to Gemini (multimodal)
+5. Response: `{ receiptUrl: objectKey, receiptPreviewUrl: presignedUrl, extracted: { merchantName, amount, currency, transactionDate } }`
 6. Frontend pre-fills item form — user reviews, can override any field, then saves
 
 ## Do Not

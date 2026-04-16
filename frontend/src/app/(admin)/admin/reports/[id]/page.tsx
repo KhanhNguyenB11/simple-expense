@@ -205,6 +205,7 @@ export default function AdminReportDetailPage() {
                   reportId={report.id}
                   itemId={item.id}
                   canEdit={false}
+                  scope="admin"
                 />
               </div>
             ))}

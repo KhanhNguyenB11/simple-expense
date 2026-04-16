@@ -1,4 +1,3 @@
-version: '3.9'
 
 services:
   postgres:
@@ -48,8 +47,9 @@ services:
       DB_NAME: ${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      MINIO_PORT: ${MINIO_PORT}
+      # Use docker service DNS name (not localhost) inside containers
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET}

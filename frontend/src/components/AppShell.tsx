@@ -7,7 +7,7 @@ type AppShellProps = {
   children: React.ReactNode;
 };
 
-const HIDE_HEADER_PATHS = new Set(["/login"]);
+const HIDE_HEADER_PATHS = new Set(["/login", "/signup"]);
 
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
